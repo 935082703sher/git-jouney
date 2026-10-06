@@ -1,0 +1,22 @@
+# Use only when this cloud environment's egress proxy requires its trusted CA bundle.
+services:
+  backend:
+    build:
+      secrets: [build_ca]
+    environment:
+      SSL_CERT_FILE: /run/aho-ca.pem
+    volumes:
+      - /etc/ssl/certs/ca-certificates.crt:/run/aho-ca.pem:ro
+  telegram-bot:
+    build:
+      secrets: [build_ca]
+    environment:
+      SSL_CERT_FILE: /run/aho-ca.pem
+    volumes:
+      - /etc/ssl/certs/ca-certificates.crt:/run/aho-ca.pem:ro
+  admin-web:
+    build:
+      secrets: [build_ca]
+secrets:
+  build_ca:
+    file: /etc/ssl/certs/ca-certificates.crt
