@@ -29,7 +29,7 @@ class Flow(StatesGroup):
     search=State()
     file=State()
 
-REQUEST_PROMPT = 'Напишите одним сообщением, что не работает или какая помощь нужна. Можно указать кабинет и приложить фото с описанием. Регистрация не нужна.'
+REQUEST_PROMPT = 'Напишите одним сообщением, что не работает или какая помощь нужна. Заявка поступит в АХО. Можно указать кабинет и приложить фото с описанием. Регистрация не нужна.'
 
 def compact_id(value): return base64.urlsafe_b64encode(uuid.UUID(value).bytes).decode().rstrip('=')
 def expand_id(value): return str(uuid.UUID(bytes=base64.urlsafe_b64decode(value+'==')))

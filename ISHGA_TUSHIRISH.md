@@ -61,6 +61,6 @@ To'liq ma'lumot: `README.md`, `docs/architecture.md`, `docs/api.md`, `docs/demo.
 
 Foydalanuvchi botga nima ishlamayotganini bitta xabarda yozadi, masalan: «305-xonada printer ishlamayapti». Ism, telefon, bo'lim va administrator tasdig'i so'ralmaydi. `/start` yo'riqnomani chiqaradi. Rasm yuborilsa, muammo rasm izohiga yoziladi.
 
-`.env` ichida `TELEGRAM_REQUEST_RECEIVER_ID` qiymatiga oldindan ulangan qabul qiluvchining raqamli Telegram ID sini kiriting. Shunda barcha oddiy Telegram arizalari aynan shu hisobga keladi. `0` qiymatida umumiy marshrutlash ishlaydi. Qabul qiluvchi faol va botga ulangan bo'lishi kerak.
+`.env` ichida `TELEGRAM_REQUEST_RECEIVER_ID` qiymatiga oldindan ulangan qabul qiluvchining raqamli Telegram ID sini kiriting. Shunda barcha oddiy Telegram arizalari aynan shu hisobga keladi. Barcha arizalar «АХО» bo‘limiga tegishli. `0` qiymati qabul qiluvchi sozlanmaganini bildiradi; boshqa bo‘limlarga yuborilmaydi. Qabul qiluvchi faol va botga ulangan bo'lishi kerak.
 
 Avval tasdiq kutgan oddiy foydalanuvchilar keyingi xabaridayoq murojaat yubora oladi. Bloklangan hisoblar avtomatik ochilmaydi. Bu o'zgarish qabul qiluvchi va admin rollarini boshqalarga bermaydi.

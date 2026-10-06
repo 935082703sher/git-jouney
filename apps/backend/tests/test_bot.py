@@ -39,6 +39,7 @@ async def test_message_without_registration_delivers_only_to_owner(world, simple
         assert u.mobile_phone is None and u.department_id is None
         tickets=list(db.scalars(select(Ticket)))
         assert len(tickets)==1 and tickets[0].description=='Konditsioner ishlamayapti, 305-xona'
+        assert tickets[0].category.name=='АХО'
         notification=db.scalar(select(Notification).where(Notification.event=='TICKET_NEW'))
         assert '@changed_username' in notification.text and '98765' in notification.text
         deliveries=list(db.scalars(select(Delivery)))
@@ -47,6 +48,20 @@ async def test_message_without_registration_delivers_only_to_owner(world, simple
     assert await deliver_one(TelegramTransport(bot))
     assert len(fake.calls)==1 and fake.calls[0].chat_id==1005
     assert 'Konditsioner ishlamayapti' in fake.calls[0].text
+
+@pytest.mark.asyncio
+async def test_missing_axo_recipient_does_not_broadcast_to_other_staff(world,monkeypatch):
+    from aho.config import settings
+    from aho.models import SystemSetting
+    monkeypatch.setattr(settings(), 'telegram_request_receiver_id', 0)
+    with Session.begin() as db:
+        db.get(SystemSetting,'routing_mode').value='BROADCAST_ALL'
+    fake.calls.clear()
+    await dp.feed_update(bot,update('Printer ishlamayapti'))
+    with Session() as db:
+        assert not db.scalar(select(Ticket))
+        assert not db.scalar(select(Delivery))
+    assert 'АХО пока не настроен' in fake.calls[-1].text
 
 @pytest.mark.asyncio
 async def test_pending_employee_can_write_without_approval(world, simple_recipient):

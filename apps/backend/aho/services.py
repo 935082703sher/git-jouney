@@ -257,9 +257,11 @@ def telegram_requester(db, telegram_id, chat_id, username, first_name, last_name
     return user
 
 def create_simple_ticket(db, actor, description, key, receiver_telegram_id=None):
-    db.execute(insert(Category).values(id=uid(), name='Другое', active=True)
+    if not receiver_telegram_id:
+        fail(503, 'Получатель АХО пока не настроен. Попробуйте отправить заявку позже.')
+    db.execute(insert(Category).values(id=uid(), name='АХО', active=True)
                .on_conflict_do_nothing(index_elements=['name']))
-    category = db.scalar(select(Category).where(Category.name == 'Другое'))
+    category = db.scalar(select(Category).where(Category.name == 'АХО'))
     data = TicketCreate(category_id=category.id, description=description,
                         building='Не указано', floor='Не указан', room='Не указан')
     return create_ticket(db, actor, data, key, receiver_telegram_id=receiver_telegram_id)
