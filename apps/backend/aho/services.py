@@ -67,7 +67,19 @@ def ticket_text(t, title='🔔 НОВАЯ ЗАЯВКА'):
     telegram = f'@{t.requester.telegram_username}' if t.requester.telegram_username else 'без username'
     return f'{title}\n{t.ticket_number}\nКатегория: {t.category.name}\nЗаявитель: {t.requester.full_name}\nTelegram: {telegram} · ID: {t.requester.telegram_user_id or "—"}\nДепартамент: {t.requester.department.name if t.requester.department else "—"}\nВнутренний: {t.requester.internal_phone or "—"}\nМобильный: {t.requester.mobile_phone or "—"}\nМесто: {t.building}, этаж {t.floor}, кабинет {t.room}\nОписание: {t.description[:2200]}\nПриоритет: {t.priority}'
 
-def route_ticket(db, t, receiver_telegram_id=None):
+def notify_channel(db, event, text, chat_id, ticket=None, dedupe=None):
+    if chat_id >= 0: fail(422, 'Укажите числовой ID канала АХО')
+    dedupe = dedupe or f'{event}:{uid()}'
+    if db.scalar(select(Notification).where(Notification.dedupe_key == dedupe)): return
+    notification = Notification(event=event, text=text, ticket_id=ticket.id if ticket else None, dedupe_key=dedupe)
+    db.add(notification); db.flush()
+    db.add(Delivery(notification_id=notification.id, ticket_id=notification.ticket_id,
+                    receiver_id=None, telegram_chat_id=chat_id))
+
+def route_ticket(db, t, receiver_telegram_id=None, channel_chat_id=None):
+    if channel_chat_id:
+        notify_channel(db, 'TICKET_NEW', ticket_text(t), channel_chat_id, t, f'new:{t.id}')
+        return
     if receiver_telegram_id:
         receiver = db.scalar(select(Receiver).join(User, Receiver.id == User.id)
                              .where(User.telegram_user_id == receiver_telegram_id))
@@ -111,7 +123,7 @@ def transition(db, actor, t, target, comment=''):
     db.flush()
     if actor: emit_change(db,t,actor,comment)
 
-def create_ticket(db, actor, data: TicketCreate, key=None, *, receiver_telegram_id=None):
+def create_ticket(db, actor, data: TicketCreate, key=None, *, receiver_telegram_id=None, channel_chat_id=None):
     if actor.status!='ACTIVE': fail(403,'Дождитесь одобрения регистрации')
     if len(data.description)>setting(db,'description_max',2000): fail(422,'Описание превышает допустимую длину')
     category = db.get(Category,data.category_id)
@@ -132,7 +144,7 @@ def create_ticket(db, actor, data: TicketCreate, key=None, *, receiver_telegram_
     db.add(t); db.flush(); db.refresh(t)
     db.add(StatusHistory(ticket_id=t.id,actor_id=actor.id,new_status='NEW',comment='Заявка зарегистрирована'))
     audit(db,actor,'TICKET_CREATED','ticket',t.id,new={'number':t.ticket_number})
-    route_ticket(db,t,receiver_telegram_id)
+    route_ticket(db,t,receiver_telegram_id,channel_chat_id)
     return t
 
 def operational(actor,t):
@@ -152,7 +164,7 @@ def action_ticket(db, actor, identifier, action, data: Action):
         t.assigned_to=actor.id; t.assignee=actor
         db.add(Assignment(ticket_id=t.id,actor_id=actor.id,assignee_id=actor.id))
         transition(db,actor,t,'ACCEPTED')
-        prior = list(db.scalars(select(Delivery).join(Notification).where(Delivery.ticket_id==t.id,Notification.event=='TICKET_NEW',Delivery.status=='SENT')))
+        prior = list(db.scalars(select(Delivery).join(Notification).where(Delivery.ticket_id==t.id,Notification.event=='TICKET_NEW',Delivery.status=='SENT',Delivery.receiver_id.is_not(None))))
         notify(db,'TICKET_ACCEPTED_EDIT',ticket_text(t,'✅ ЗАЯВКА ПРИНЯТА')+f'\nОтветственный: {actor.full_name}',[db.get(User,d.receiver_id) for d in prior],t,edit_ids={d.receiver_id:d.telegram_message_id for d in prior})
     elif action in ('assign','reassign'):
         if not manager(actor): fail(403,'Назначение доступно руководителю')
@@ -256,15 +268,15 @@ def telegram_requester(db, telegram_id, chat_id, username, first_name, last_name
     user.last_bot_interaction = now()
     return user
 
-def create_simple_ticket(db, actor, description, key, receiver_telegram_id=None):
-    if not receiver_telegram_id:
+def create_simple_ticket(db, actor, description, key, receiver_telegram_id=None, channel_chat_id=None):
+    if not receiver_telegram_id and not channel_chat_id:
         fail(503, 'Получатель АХО пока не настроен. Попробуйте отправить заявку позже.')
     db.execute(insert(Category).values(id=uid(), name='АХО', active=True)
                .on_conflict_do_nothing(index_elements=['name']))
     category = db.scalar(select(Category).where(Category.name == 'АХО'))
     data = TicketCreate(category_id=category.id, description=description,
                         building='Не указано', floor='Не указан', room='Не указан')
-    return create_ticket(db, actor, data, key, receiver_telegram_id=receiver_telegram_id)
+    return create_ticket(db, actor, data, key, receiver_telegram_id=receiver_telegram_id, channel_chat_id=channel_chat_id)
 
 def register_employee(db, telegram_id, chat_id, username, profile: Profile):
     if telegram_id!=chat_id: fail(422,'Регистрация доступна только в личном чате')

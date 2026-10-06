@@ -5,6 +5,7 @@ from sqlalchemy import select
 from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest, TelegramRetryAfter
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from .db import Session, now
+from .config import settings
 from .models import Delivery, Receiver, Ticket, User
 from .services import STATUS_LABELS, notify, eligible_receivers, manager, ticket_text
 
@@ -27,7 +28,10 @@ def ticket_keyboard(t, user):
 class TelegramTransport:
     def __init__(self, bot): self.bot=bot
     async def send(self,d,t,user):
-        markup=ticket_keyboard(t,user) if t else None
+        markup=ticket_keyboard(t,user) if t and user else None
+        if d.receiver_id is None and settings().telegram_bot_username:
+            markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
+                text='Открыть бота АХО',url=f'https://t.me/{settings().telegram_bot_username}')]])
         text=d.notification.text
         # A pending new-ticket delivery may be overtaken by acceptance.
         if t and d.notification.event=='TICKET_NEW' and t.status!='NEW':
@@ -51,9 +55,12 @@ async def deliver_one(transport):
         d=db.scalar(select(Delivery).where(Delivery.status.in_(['PENDING','RETRYING']),Delivery.next_attempt_at<=now()).order_by(Delivery.next_attempt_at).with_for_update(skip_locked=True,of=Delivery).limit(1))
         if not d: return False
         t=db.get(Ticket,d.ticket_id) if d.ticket_id else None
-        u=db.get(User,d.receiver_id); r=db.get(Receiver,d.receiver_id)
+        u=db.get(User,d.receiver_id) if d.receiver_id else None
+        r=db.get(Receiver,d.receiver_id) if d.receiver_id else None
         # Re-check revocation immediately before disclosing ticket information.
         allowed = u and u.status=='ACTIVE'
+        if d.receiver_id is None:
+            allowed = d.telegram_chat_id < 0 and str(d.telegram_chat_id) == settings().aho_telegram_chat_id
         if t and u and u.id!=t.requester_id:
             from .security import staff
             allowed = allowed and staff(u) and r and r.receiver_status=='ACTIVE' and r.connection_status=='CONNECTED'

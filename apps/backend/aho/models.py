@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, Integer, BigInteger, Boolean, DateTime, ForeignKey, JSON, UniqueConstraint, Index
+from sqlalchemy import String, Text, Integer, BigInteger, Boolean, DateTime, ForeignKey, JSON, UniqueConstraint, CheckConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base, now
 
@@ -189,7 +189,7 @@ class Delivery(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     notification_id: Mapped[str] = mapped_column(ForeignKey('notifications.id'), index=True)
     ticket_id: Mapped[str | None] = mapped_column(ForeignKey('tickets.id'), index=True)
-    receiver_id: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    receiver_id: Mapped[str | None] = mapped_column(ForeignKey('users.id'))
     telegram_chat_id: Mapped[int] = mapped_column(BigInteger)
     telegram_message_id: Mapped[int | None] = mapped_column(BigInteger)
     edit_message_id: Mapped[int | None] = mapped_column(BigInteger)
@@ -202,7 +202,9 @@ class Delivery(Base):
     error_code: Mapped[str | None] = mapped_column(String(80))
     error_message: Mapped[str | None] = mapped_column(Text)
     notification: Mapped[Notification] = relationship(lazy='joined')
-    __table_args__ = (UniqueConstraint('notification_id', 'receiver_id'),)
+    __table_args__ = (UniqueConstraint('notification_id', 'receiver_id'),
+                     UniqueConstraint('notification_id', 'telegram_chat_id', name='uq_delivery_chat'),
+                     CheckConstraint('receiver_id IS NOT NULL OR telegram_chat_id < 0', name='ck_channel_delivery'))
 
 class SlaEvent(Base):
     __tablename__ = 'sla_events'

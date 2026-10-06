@@ -64,3 +64,9 @@ Foydalanuvchi botga nima ishlamayotganini bitta xabarda yozadi, masalan: «305-x
 `.env` ichida `TELEGRAM_REQUEST_RECEIVER_ID` qiymatiga oldindan ulangan qabul qiluvchining raqamli Telegram ID sini kiriting. Shunda barcha oddiy Telegram arizalari aynan shu hisobga keladi. Barcha arizalar «АХО» bo‘limiga tegishli. `0` qiymati qabul qiluvchi sozlanmaganini bildiradi; boshqa bo‘limlarga yuborilmaydi. Qabul qiluvchi faol va botga ulangan bo'lishi kerak.
 
 Avval tasdiq kutgan oddiy foydalanuvchilar keyingi xabaridayoq murojaat yubora oladi. Bloklangan hisoblar avtomatik ochilmaydi. Bu o'zgarish qabul qiluvchi va admin rollarini boshqalarga bermaydi.
+
+## Arizalarni kanalga yuborish
+
+`.env` ichida `AHO_TELEGRAM_CHAT_ID` ga kanalning manfiy raqamli ID sini yozing. Botni kanal administratorlari qatoriga qo'shib, «Xabar joylash / Post Messages» huquqini yoqing. So'ng backend va telegram-bot konteynerlarini qayta yarating. Kanal sozlanganida yangi ariza faqat shu kanalga ketadi, shaxsiy hisobga takroran yuborilmaydi.
+
+Kanalda ariza matni va murojaatchining Telegram ma'lumotlari chiqadi. «Открыть бота АХО» tugmasi orqali botga o'tib, «📥 Новые заявки» bo'limidan arizani boshqarish mumkin. Yetkazish xatolari va holati admin panelidagi jurnalga yoziladi.

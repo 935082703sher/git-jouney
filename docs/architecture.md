@@ -38,7 +38,7 @@ erDiagram
     tickets ||--o| ticket_ratings : satisfaction
     tickets o|--o{ notifications : events
     notifications ||--o{ notification_deliveries : per_recipient
-    users ||--o{ notification_deliveries : recipient
+    users |o--o{ notification_deliveries : recipient
     tickets ||--o{ sla_events : thresholds
     users o|--o{ audit_logs : actor
     sla_rules {
@@ -110,7 +110,7 @@ erDiagram
     }
 ```
 
-UUID представлены строками длиной 36. Числовые Telegram ID хранятся как `BIGINT`; имена пользователей — только отображаемые данные. В `receiver_categories` составной ключ запрещает повторную связь. Уникальность `(notification_id, receiver_id)` предотвращает дубли внутри события; `(ticket_id, kind)` — повтор SLA-порога. Категории и департаменты архивируются, а не удаляются.
+UUID представлены строками длиной 36. Числовые Telegram ID хранятся как `BIGINT`; имена пользователей — только отображаемые данные. В `receiver_categories` составной ключ запрещает повторную связь. У канальной доставки `receiver_id` равен NULL, адрес — отрицательный Telegram chat ID. Уникальность `(notification_id, telegram_chat_id)` и `(notification_id, receiver_id)` предотвращает дубли внутри события; `(ticket_id, kind)` — повтор SLA-порога. Категории и департаменты архивируются, а не удаляются.
 
 ## Жизненный цикл
 

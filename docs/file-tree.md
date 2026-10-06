@@ -45,7 +45,8 @@ AHO-project/
 │   │   │   └── services.py
 │   │   ├── migrations/
 │   │   │   ├── versions/
-│   │   │   │   └── 0001_initial.py
+│   │   │   │   ├── 0001_initial.py
+│   │   │   │   └── 0002_channel_delivery.py
 │   │   │   └── env.py
 │   │   ├── tests/
 │   │   │   ├── conftest.py

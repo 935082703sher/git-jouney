@@ -12,13 +12,18 @@ if not make_url(os.environ['DATABASE_URL']).database.endswith('_test'):
 os.environ['JWT_SECRET']='test-only-signing-key-that-is-at-least-32-characters'
 os.environ['ENVIRONMENT']='testing'
 os.environ['TELEGRAM_BOT_TOKEN']=''
+os.environ['AHO_TELEGRAM_CHAT_ID']=''
 from aho.db import Base,engine,Session
 from aho.models import *
 from aho.security import hash_password
 
 @pytest.fixture(scope='session',autouse=True)
 def schema():
-    Base.metadata.create_all(engine)
+    from alembic.config import Config
+    from alembic import command
+    config = Config(str(Path(__file__).resolve().parents[1] / 'alembic.ini'))
+    config.set_main_option('script_location', str(Path(__file__).resolve().parents[1] / 'migrations'))
+    command.upgrade(config, 'head')
     yield
 
 @pytest.fixture

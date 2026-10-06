@@ -64,6 +64,67 @@ async def test_missing_axo_recipient_does_not_broadcast_to_other_staff(world,mon
     assert 'АХО пока не настроен' in fake.calls[-1].text
 
 @pytest.mark.asyncio
+async def test_simple_request_goes_only_to_configured_channel(world,simple_recipient,monkeypatch):
+    from aho.config import settings
+    from aho.notifications import deliver_one,TelegramTransport
+    from test_domain import act
+    monkeypatch.setattr(settings(),'aho_telegram_chat_id','-1003294339853')
+    monkeypatch.setattr(settings(),'telegram_bot_username','aho_test_bot')
+    event=update('Printer ishlamayapti, 305-xona')
+    await dp.feed_update(bot,event)
+    await dp.feed_update(bot,event)
+    with Session() as db:
+        ticket=db.scalar(select(Ticket));ticket_id=ticket.id
+        deliveries=list(db.scalars(select(Delivery)))
+        assert len(deliveries)==1
+        assert deliveries[0].receiver_id is None
+        assert deliveries[0].telegram_chat_id==-1003294339853
+    fake.calls.clear()
+    assert await deliver_one(TelegramTransport(bot))
+    assert fake.calls[0].chat_id==-1003294339853
+    assert 'Printer ishlamayapti' in fake.calls[0].text
+    assert fake.calls[0].reply_markup.inline_keyboard[0][0].url=='https://t.me/aho_test_bot'
+    assert fake.calls[0].reply_markup.inline_keyboard[0][0].callback_data is None
+    # A channel delivery is not mistaken for a private recipient during acceptance.
+    act(world,ticket_id,'admin','accept')
+    with Session() as db: assert db.get(Ticket,ticket_id).status=='ACCEPTED'
+
+@pytest.mark.asyncio
+async def test_channel_change_revokes_pending_channel_delivery(world,monkeypatch):
+    from aho.config import settings
+    from aho.notifications import deliver_one,TelegramTransport
+    monkeypatch.setattr(settings(),'aho_telegram_chat_id','-1003294339853')
+    await dp.feed_update(bot,update('Printer ishlamayapti'))
+    monkeypatch.setattr(settings(),'aho_telegram_chat_id','-1009999999999')
+    fake.calls.clear()
+    assert await deliver_one(TelegramTransport(bot))
+    assert not fake.calls
+    with Session() as db:
+        delivery=db.scalar(select(Delivery))
+        assert delivery.status=='FAILED' and delivery.error_code=='ACCESS_REVOKED'
+
+@pytest.mark.asyncio
+async def test_channel_failure_retains_ticket_and_does_not_block_owner(world,simple_recipient,monkeypatch):
+    from aho.config import settings
+    from aho.notifications import deliver_one,DeliveryError
+    monkeypatch.setattr(settings(),'aho_telegram_chat_id','-1003294339853')
+    await dp.feed_update(bot,update('Printer ishlamayapti'))
+    class ForbiddenChannel:
+        async def send(self,*args):
+            raise DeliveryError('Channel permission denied',permanent=True,blocked=True)
+    assert await deliver_one(ForbiddenChannel())
+    with Session() as db:
+        assert db.scalar(select(Ticket)) is not None
+        assert db.scalar(select(Delivery)).status=='FAILED'
+        assert db.get(Receiver,world['admin']).connection_status=='CONNECTED'
+
+def test_channel_setting_rejects_private_user_ids():
+    from aho.config import Settings
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        Settings(aho_telegram_chat_id='1161549639')
+
+@pytest.mark.asyncio
 async def test_pending_employee_can_write_without_approval(world, simple_recipient):
     with Session.begin() as db: db.get(User,world['employee']).status='PENDING_APPROVAL'
     await dp.feed_update(bot,update('Printer ishlamayapti',uid=1000))

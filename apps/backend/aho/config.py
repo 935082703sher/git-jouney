@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 
 class Settings(BaseSettings):
     database_url: str = 'postgresql+psycopg://aho:aho@localhost:5432/aho'
@@ -19,6 +20,13 @@ class Settings(BaseSettings):
     environment: str = 'development'
     cookie_secure: bool = False
     model_config = SettingsConfigDict(env_file='.env', extra='ignore')
+
+    @field_validator('aho_telegram_chat_id')
+    @classmethod
+    def channel_id(cls, value):
+        if value and (not value.startswith('-') or not value[1:].isdigit() or int(value) >= 0):
+            raise ValueError('AHO_TELEGRAM_CHAT_ID must be a negative numeric chat ID or empty')
+        return str(int(value)) if value else ''
 
 @lru_cache
 def settings():

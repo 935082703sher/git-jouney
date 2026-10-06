@@ -303,7 +303,8 @@ async def simple_request(message: TelegramMessage,state: FSMContext):
     with Session.begin() as db:
         u=actor(db,message)
         ticket=create_simple_ticket(db,u,text,f'telegram:{message.chat.id}:{message.message_id}',
-                                    settings().telegram_request_receiver_id)
+                                    settings().telegram_request_receiver_id,
+                                    int(settings().aho_telegram_chat_id) if settings().aho_telegram_chat_id else None)
         if message.photo or message.document or message.video:
             if not db.scalar(select(Attachment).where(Attachment.ticket_id==ticket.id)):
                 add_attachment(db,u,ticket.id,telegram_file(message))
