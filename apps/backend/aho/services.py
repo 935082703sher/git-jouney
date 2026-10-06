@@ -64,9 +64,19 @@ def eligible_receivers(db, preference='receive_requests'):
 
 def ticket_text(t, title='🔔 НОВАЯ ЗАЯВКА'):
     from zoneinfo import ZoneInfo
-    return f'{title}\n{t.ticket_number}\nКатегория: {t.category.name}\nЗаявитель: {t.requester.full_name}\nДепартамент: {t.requester.department.name if t.requester.department else "—"}\nВнутренний: {t.requester.internal_phone or "—"}\nМобильный: {t.requester.mobile_phone or "—"}\nМесто: {t.building}, этаж {t.floor}, кабинет {t.room}\nОписание: {t.description[:2200]}\nПриоритет: {t.priority}'
+    telegram = f'@{t.requester.telegram_username}' if t.requester.telegram_username else 'без username'
+    return f'{title}\n{t.ticket_number}\nКатегория: {t.category.name}\nЗаявитель: {t.requester.full_name}\nTelegram: {telegram} · ID: {t.requester.telegram_user_id or "—"}\nДепартамент: {t.requester.department.name if t.requester.department else "—"}\nВнутренний: {t.requester.internal_phone or "—"}\nМобильный: {t.requester.mobile_phone or "—"}\nМесто: {t.building}, этаж {t.floor}, кабинет {t.room}\nОписание: {t.description[:2200]}\nПриоритет: {t.priority}'
 
-def route_ticket(db, t):
+def route_ticket(db, t, receiver_telegram_id=None):
+    if receiver_telegram_id:
+        receiver = db.scalar(select(Receiver).join(User, Receiver.id == User.id)
+                             .where(User.telegram_user_id == receiver_telegram_id))
+        if not (receiver and receiver.user.status == 'ACTIVE' and staff(receiver.user)
+                and receiver.receiver_status == 'ACTIVE' and receiver.connection_status == 'CONNECTED'
+                and receiver.user.telegram_chat_id and receiver.receive_requests):
+            fail(503, 'Получатель временно недоступен. Попробуйте отправить заявку позже.')
+        notify(db, 'TICKET_NEW', ticket_text(t), [receiver.user], t, f'new:{t.id}')
+        return
     candidates = eligible_receivers(db)
     mode = setting(db,'routing_mode','CATEGORY')
     if mode=='BROADCAST_ALL': selected = candidates
@@ -101,7 +111,7 @@ def transition(db, actor, t, target, comment=''):
     db.flush()
     if actor: emit_change(db,t,actor,comment)
 
-def create_ticket(db, actor, data: TicketCreate, key=None):
+def create_ticket(db, actor, data: TicketCreate, key=None, *, receiver_telegram_id=None):
     if actor.status!='ACTIVE': fail(403,'Дождитесь одобрения регистрации')
     if len(data.description)>setting(db,'description_max',2000): fail(422,'Описание превышает допустимую длину')
     category = db.get(Category,data.category_id)
@@ -122,7 +132,7 @@ def create_ticket(db, actor, data: TicketCreate, key=None):
     db.add(t); db.flush(); db.refresh(t)
     db.add(StatusHistory(ticket_id=t.id,actor_id=actor.id,new_status='NEW',comment='Заявка зарегистрирована'))
     audit(db,actor,'TICKET_CREATED','ticket',t.id,new={'number':t.ticket_number})
-    route_ticket(db,t)
+    route_ticket(db,t,receiver_telegram_id)
     return t
 
 def operational(actor,t):
@@ -223,6 +233,36 @@ def add_attachment(db,actor,identifier,data: FileInput):
     a=Attachment(ticket_id=t.id,uploaded_by=actor.id,**data.model_dump()); db.add(a); db.flush()
     audit(db,actor,'ATTACHMENT_ADDED','ticket',t.id,new={'attachment_id':a.id})
     return a
+
+def telegram_requester(db, telegram_id, chat_id, username, first_name, last_name=None):
+    """Identify private-chat requesters without a registration or approval form."""
+    if telegram_id != chat_id: fail(403, 'Откройте бота в личном чате')
+    lock = int(sha256(f'telegram-user:{telegram_id}'.encode()).hexdigest()[:15], 16)
+    db.execute(select(func.pg_advisory_xact_lock(lock)))
+    user = db.scalar(select(User).where(User.telegram_user_id == telegram_id))
+    if not user:
+        user = User(telegram_user_id=telegram_id, telegram_chat_id=chat_id,
+                    first_name=(first_name or 'Telegram')[:80], last_name=(last_name or '')[:80],
+                    status='ACTIVE', roles=[db.get(Role, 'EMPLOYEE')])
+        db.add(user); db.flush()
+        audit(db, user, 'TELEGRAM_REQUESTER_CREATED', 'user', user.id)
+    elif (user.status == 'PENDING_APPROVAL' and set(user.role_names) == {'EMPLOYEE'}
+          and not db.get(Receiver, user.id)):
+        user.status = 'ACTIVE'
+        audit(db, user, 'REGISTRATION_REQUIREMENT_REMOVED', 'user', user.id)
+    if user.status != 'ACTIVE': fail(403, 'Доступ к боту отключен. Обратитесь к администратору.')
+    user.telegram_chat_id = chat_id
+    user.telegram_username = username
+    user.last_bot_interaction = now()
+    return user
+
+def create_simple_ticket(db, actor, description, key, receiver_telegram_id=None):
+    db.execute(insert(Category).values(id=uid(), name='Другое', active=True)
+               .on_conflict_do_nothing(index_elements=['name']))
+    category = db.scalar(select(Category).where(Category.name == 'Другое'))
+    data = TicketCreate(category_id=category.id, description=description,
+                        building='Не указано', floor='Не указан', room='Не указан')
+    return create_ticket(db, actor, data, key, receiver_telegram_id=receiver_telegram_id)
 
 def register_employee(db, telegram_id, chat_id, username, profile: Profile):
     if telegram_id!=chat_id: fail(422,'Регистрация доступна только в личном чате')

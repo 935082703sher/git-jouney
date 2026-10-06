@@ -57,8 +57,10 @@ Git'dagi kod: `935082703sher/git-jouney`, loyiha branch'i: `aho-request-system`.
 
 To'liq ma'lumot: `README.md`, `docs/architecture.md`, `docs/api.md`, `docs/demo.md`, `docs/validation.md`.
 
-## Telegram orqali ro'yxatdan o'tganlarni tasdiqlash
+## Ro'yxatdan o'tmasdan ariza yuborish
 
-`ADMIN` huquqli hisob botga `/start` yuboradi. Menyuda **👥 Регистрации** tugmasi chiqadi. Uni bosib, kutayotgan xodim nomi yonidagi **✅ Подтвердить** tugmasini tanlang. Xodimga tasdiqlash xabari yuboriladi; u `/start` yuborib murojaat yaratishi mumkin.
+Foydalanuvchi botga nima ishlamayotganini bitta xabarda yozadi, masalan: «305-xonada printer ishlamayapti». Ism, telefon, bo'lim va administrator tasdig'i so'ralmaydi. `/start` yo'riqnomani chiqaradi. Rasm yuborilsa, muammo rasm izohiga yoziladi.
 
-Bu bo'lim faqat administratorga ochiq. Oddiy xodim, AHO mutaxassisi va rahbar shu tugmani yoki eski callback'ni ishlatib tasdiqlay olmaydi. Tasdiqlash auditga yoziladi; qayta bosish takroriy xabar yaratmaydi. Administrator rollari PostgreSQL'da saqlanadi, Git yoki ZIP ichida shaxsiy hisob konfiguratsiyasi saqlanmaydi. Boshqa kompyuterda administrator kirishini `README.md` bo'yicha sozlang.
+`.env` ichida `TELEGRAM_REQUEST_RECEIVER_ID` qiymatiga oldindan ulangan qabul qiluvchining raqamli Telegram ID sini kiriting. Shunda barcha oddiy Telegram arizalari aynan shu hisobga keladi. `0` qiymatida umumiy marshrutlash ishlaydi. Qabul qiluvchi faol va botga ulangan bo'lishi kerak.
+
+Avval tasdiq kutgan oddiy foydalanuvchilar keyingi xabaridayoq murojaat yubora oladi. Bloklangan hisoblar avtomatik ochilmaydi. Bu o'zgarish qabul qiluvchi va admin rollarini boshqalarga bermaydi.

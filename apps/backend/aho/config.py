@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ''
     telegram_bot_username: str = ''
     telegram_replace_webhook: bool = False
+    telegram_request_receiver_id: int = 0
     aho_telegram_chat_id: str = ''
     admin_initial_email: str = 'admin@example.local'
     admin_initial_password: str = ''
