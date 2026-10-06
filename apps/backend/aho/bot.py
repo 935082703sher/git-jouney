@@ -18,7 +18,7 @@ from .db import Session, now
 from .models import *
 from .schemas import Profile, TicketCreate, Action, Comment, FileInput
 from .services import *
-from .security import staff, manager
+from .security import staff, manager, has_role, require
 from .bot_storage import PostgresStorage
 from .notifications import delivery_loop
 from .bot_client import create_bot
@@ -40,9 +40,13 @@ def expand_id(value): return str(uuid.UUID(bytes=base64.urlsafe_b64decode(value+
 def reply(rows): return ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=x) for x in row] for row in rows],resize_keyboard=True)
 def inline(rows): return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=t,callback_data=c) for t,c in row] for row in rows])
 def menu(u,employee_mode=False):
-    if staff(u) and not employee_mode: return reply([['📥 Новые заявки','🔧 Мои заявки'],['⏳ Ожидающие','✅ Выполненные'],['🟢 Мой статус','🔍 Найти заявку'],['Режим сотрудника']])
+    if staff(u) and not employee_mode:
+        rows=[['📥 Новые заявки','🔧 Мои заявки'],['⏳ Ожидающие','✅ Выполненные'],['🟢 Мой статус','🔍 Найти заявку'],['Режим сотрудника']]
+        if has_role(u,'ADMIN'): rows.append(['👥 Регистрации'])
+        return reply(rows)
     rows=[['➕ Создать заявку','📋 Мои заявки'],['🕘 История','👤 Мой профиль'],['ℹ️ Помощь']]
     if staff(u): rows.append(['Режим АХО'])
+    if has_role(u,'ADMIN'): rows.append(['👥 Регистрации'])
     return reply(rows)
 
 def actor(db,event,active=True):
@@ -98,6 +102,52 @@ async def cancel_flow(message: TelegramMessage,state: FSMContext):
         u=actor(db,message)
         await state.update_data(employee_mode=message.text=='Режим сотрудника')
         await message.answer('Главное меню',reply_markup=menu(u,message.text=='Режим сотрудника'))
+
+def registration_page(db, admin, page=0):
+    require(admin, 'ADMIN')
+    if page < 0:
+        fail(422, 'Недопустимая страница')
+    rows = list(db.scalars(select(User).where(User.status == 'PENDING_APPROVAL')
+                          .order_by(User.created_at, User.id).offset(page * 8).limit(9)))
+    if not rows:
+        return 'Нет регистраций, ожидающих одобрения.', inline([[('Обновить', 'registrations:0')]])
+    lines = ['Ожидают одобрения администратора:']
+    buttons = []
+    for user in rows[:8]:
+        department = user.department.name if user.department else 'Не указано'
+        lines.append(f'• {user.full_name} — {department}')
+        buttons.append([(f'✅ Подтвердить: {user.full_name[:45]}', f'approve-user:{user.id}')])
+    navigation = []
+    if page: navigation.append(('Назад', f'registrations:{page - 1}'))
+    if len(rows) > 8: navigation.append(('Далее', f'registrations:{page + 1}'))
+    if navigation: buttons.append(navigation)
+    buttons.append([('Обновить', 'registrations:0')])
+    return '\n\n'.join(lines), inline(buttons)
+
+@router.message(F.text == '👥 Регистрации')
+async def pending_registrations(message: TelegramMessage, state: FSMContext):
+    with Session.begin() as db:
+        text, keyboard = registration_page(db, actor(db, message))
+    await state.clear()
+    await message.answer(text, reply_markup=keyboard)
+
+@router.callback_query(F.data.startswith('registrations:'))
+async def pending_registrations_page(query: CallbackQuery):
+    page = int(query.data.split(':')[1])
+    with Session.begin() as db:
+        text, keyboard = registration_page(db, actor(db, query), page)
+    await query.answer()
+    await query.message.answer(text, reply_markup=keyboard)
+
+@router.callback_query(F.data.startswith('approve-user:'))
+async def confirm_registration(query: CallbackQuery):
+    user_id = query.data.split(':')[1]
+    with Session.begin() as db:
+        admin = actor(db, query)
+        user = approve_registration(db, admin, user_id)
+        name = user.full_name
+    await query.answer('Регистрация одобрена')
+    await query.message.answer(f'{name}: регистрация одобрена. Сотрудник получит уведомление и сможет создать заявку.')
 
 async def reg_prompt(message,state):
     data=await state.get_data(); field=REG_FIELDS[data.get('step',0)]

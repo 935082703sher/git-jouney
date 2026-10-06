@@ -56,3 +56,9 @@ Bir token uchun bir vaqtning o'zida faqat bitta polling bot ishlashi kerak. Bulu
 Git'dagi kod: `935082703sher/git-jouney`, loyiha branch'i: `aho-request-system`.
 
 To'liq ma'lumot: `README.md`, `docs/architecture.md`, `docs/api.md`, `docs/demo.md`, `docs/validation.md`.
+
+## Telegram orqali ro'yxatdan o'tganlarni tasdiqlash
+
+`ADMIN` huquqli hisob botga `/start` yuboradi. Menyuda **👥 Регистрации** tugmasi chiqadi. Uni bosib, kutayotgan xodim nomi yonidagi **✅ Подтвердить** tugmasini tanlang. Xodimga tasdiqlash xabari yuboriladi; u `/start` yuborib murojaat yaratishi mumkin.
+
+Bu bo'lim faqat administratorga ochiq. Oddiy xodim, AHO mutaxassisi va rahbar shu tugmani yoki eski callback'ni ishlatib tasdiqlay olmaydi. Tasdiqlash auditga yoziladi; qayta bosish takroriy xabar yaratmaydi. Administrator rollari PostgreSQL'da saqlanadi, Git yoki ZIP ichida shaxsiy hisob konfiguratsiyasi saqlanmaydi. Boshqa kompyuterda administrator kirishini `README.md` bo'yicha sozlang.

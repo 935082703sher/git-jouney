@@ -122,10 +122,12 @@ def change_user(identifier: str,data: UserUpdate,u=Depends(current_user),db=Depe
     v=db.get(User,identifier)
     if not v: fail(404,'Сотрудник не найден')
     if v.id==u.id and ((data.roles is not None and 'ADMIN' not in data.roles) or (data.status and data.status!='ACTIVE')): fail(422,'Нельзя отключить собственный доступ администратора')
+    approved = data.status == 'ACTIVE' and v.status == 'PENDING_APPROVAL'
+    if approved: v = approve_registration(db,u,identifier)
     if data.roles is not None: v.roles=[db.get(Role,r) for r in set(data.roles)]
     if data.status: v.status=data.status
     audit(db,u,'USER_UPDATED','user',v.id,new=data.model_dump(exclude_none=True))
-    if data.status=='ACTIVE': notify(db,'USER_APPROVED','Ваша регистрация одобрена. Нажмите /start, чтобы открыть меню.',[v])
+    if data.status=='ACTIVE' and not approved: notify(db,'USER_APPROVED','Ваша регистрация одобрена. Нажмите /start, чтобы открыть меню.',[v])
     return user_json(v)
 
 CATALOGS={'departments':Department,'categories':Category}

@@ -144,3 +144,59 @@ async def test_telegram_transport_uses_proxy_environment_and_verified_tls():
         assert await transport.create_session() is client
     finally:
         await transport.close()
+
+def callback_update(data, telegram_id):
+    n=next(counter)
+    return Update.model_validate({'update_id':n,'callback_query':{
+        'id':str(n),'chat_instance':'1',
+        'from':{'id':telegram_id,'is_bot':False,'first_name':'Test'},
+        'data':data,'message':{'message_id':1,
+        'date':int(datetime.now(timezone.utc).timestamp()),
+        'chat':{'id':telegram_id,'type':'private'},'text':'Регистрации'}}})
+
+@pytest.mark.asyncio
+async def test_admin_approves_registration_from_telegram_once(world):
+    from aho.models import Audit,Delivery
+    with Session.begin() as db:
+        db.get(User,world['employee2']).status='PENDING_APPROVAL'
+    fake.calls.clear()
+    await dp.feed_update(bot,update('/start',uid=1005))
+    keyboard=fake.calls[-1].reply_markup
+    assert any(button.text=='👥 Регистрации' for row in keyboard.keyboard for button in row)
+    await dp.feed_update(bot,update('👥 Регистрации',uid=1005))
+    assert 'Employee2' in fake.calls[-1].text
+    data=f'approve-user:{world["employee2"]}'
+    await dp.feed_update(bot,callback_update(data,1005))
+    with Session() as db:
+        assert db.get(User,world['employee2']).status=='ACTIVE'
+        event=db.scalar(select(Notification).where(Notification.event=='USER_APPROVED'))
+        assert event is not None
+        assert db.scalar(select(Delivery).where(Delivery.notification_id==event.id)).receiver_id==world['employee2']
+        audit=db.scalar(select(Audit).where(Audit.action=='USER_APPROVED'))
+        assert audit.actor_id==world['admin'] and audit.source=='TELEGRAM'
+    await dp.feed_update(bot,callback_update(data,1005))
+    with Session() as db:
+        assert db.scalar(select(func.count()).select_from(Notification).where(Notification.event=='USER_APPROVED'))==1
+    assert any('уже обработана' in (getattr(c,'text','') or '') for c in fake.calls)
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('telegram_id',[1000,1002,1004])
+async def test_non_admin_cannot_list_or_approve_registrations(world,telegram_id):
+    with Session.begin() as db:
+        db.get(User,world['employee2']).status='PENDING_APPROVAL'
+    fake.calls.clear()
+    await dp.feed_update(bot,update('👥 Регистрации',uid=telegram_id))
+    await dp.feed_update(bot,callback_update(f'approve-user:{world["employee2"]}',telegram_id))
+    assert not any('Employee2' in (getattr(c,'text','') or '') for c in fake.calls)
+    assert any('Недостаточно прав' in (getattr(c,'text','') or '') for c in fake.calls)
+    with Session() as db:
+        assert db.get(User,world['employee2']).status=='PENDING_APPROVAL'
+        assert not db.scalar(select(Notification).where(Notification.event=='USER_APPROVED'))
+
+@pytest.mark.asyncio
+async def test_registration_callback_cannot_reactivate_disabled_user(world):
+    with Session.begin() as db:
+        db.get(User,world['employee2']).status='DISABLED'
+    await dp.feed_update(bot,callback_update(f'approve-user:{world["employee2"]}',1005))
+    with Session() as db:
+        assert db.get(User,world['employee2']).status=='DISABLED'

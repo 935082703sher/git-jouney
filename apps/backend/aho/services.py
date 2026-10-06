@@ -245,6 +245,22 @@ def update_profile(db, actor, data: Profile):
     audit(db,actor,'PROFILE_UPDATED','user',actor.id,new={'fields':list(data.model_dump())})
     return actor
 
+def approve_registration(db, actor, user_id):
+    require(actor, 'ADMIN')
+    user = db.scalar(select(User).where(User.id == user_id)
+                     .with_for_update(of=User).execution_options(populate_existing=True))
+    if not user:
+        fail(404, 'Сотрудник не найден')
+    if user.status != 'PENDING_APPROVAL':
+        fail(409, 'Регистрация уже обработана. Обновите список.')
+    user.status = 'ACTIVE'
+    audit(db, actor, 'USER_APPROVED', 'user', user.id,
+          {'status': 'PENDING_APPROVAL'}, {'status': 'ACTIVE'})
+    notify(db, 'USER_APPROVED',
+           'Ваша регистрация одобрена. Нажмите /start, чтобы открыть меню и создать заявку.',
+           [user])
+    return user
+
 def receiver_json(db,r):
     workload=db.scalar(select(func.count()).select_from(Ticket).where(Ticket.assigned_to==r.id,Ticket.status.in_(ACTIVE_STATUSES)))
     return {**user_json(r.user),**{k:getattr(r,k) for k in ('receiver_status','connection_status','availability','receive_requests','receive_status_updates','receive_sla_alerts','receive_escalations','is_fallback','expected_username','last_delivery_error','last_delivery_attempt','telegram_delivery_status')},'category_ids':[c.id for c in r.categories],'categories':[c.name for c in r.categories],'workload':workload}
